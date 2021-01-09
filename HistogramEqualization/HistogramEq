@@ -1,0 +1,52 @@
+from skimage import color, io
+import numpy as np
+import matplotlib.pyplot as plt
+
+plt.close("all")
+
+I = io.imread('calcificaciontendon.jpg')
+Ima = np.uint8( color.rgb2gray(I) * 255 )
+[filas, columnas] = Ima.shape
+
+histn = np.zeros(256)
+for i in range(filas):
+    for j in range(columnas):
+        pos = Ima[i,j]
+        histn[pos] = histn[pos] + 1
+probn = np.zeros(256)
+probn = histn / (filas * columnas)
+Hn = probn.cumsum()
+
+sal = np.zeros( (filas, columnas) )
+for i in range(filas):
+    for j in range(columnas):
+        pos = Ima[i,j]
+        sal[i, j] = np.uint8( Hn[pos]*255 )
+sal = np.uint8(sal)
+
+hists = np.zeros(256)
+for i in range(filas):
+    for j in range(columnas):
+        pos = sal[i,j]
+        hists[pos] = hists[pos] + 1
+probs = np.zeros(256)
+probs = hists / (filas * columnas)
+Hs = probs.cumsum()
+
+fig = plt.figure(1)
+ax1 = fig.add_subplot(221)
+ax2 = fig.add_subplot(222)
+ax3 = fig.add_subplot(223)
+ax4 = fig.add_subplot(224)
+ax1.plot(histn)
+ax2.plot(Hn)
+ax3.plot(hists)
+ax4.plot(Hs)
+
+fig = plt.figure(2)
+plt.gray()  # Muestra las graficas en escala de grises
+ax1 = fig.add_subplot(121)
+ax2 = fig.add_subplot(122)
+ax1.imshow(Ima)
+ax2.imshow(sal)
+plt.show()
