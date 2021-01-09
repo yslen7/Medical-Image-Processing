@@ -1,0 +1,215 @@
+import cv2
+from skimage import color, io
+import numpy as np
+import matplotlib.pyplot as plt
+
+plt.close('all')
+
+# Funcion para aplicar correccion gamma
+def CorrGamma(img,gamma):
+    gris = np.uint8(color.rgb2gray(img)*255)
+    grisd = np.double(gris)
+    cg=gris.copy()
+    [fil, col] = gris.shape
+    
+    # gamma=np.double(input('Valor de gamma: '))
+    k=255/np.max(grisd**gamma)
+    
+    for i in range(0, fil):
+        for j in range(0, col):
+            cg[i,j]=k*grisd[i,j]**(gamma)
+    
+    cg = np.uint8(cg)
+
+    return cg #Regresa el nombre de la imagen
+
+#Funcion para aplicar Sobel
+def Sobel(img):
+    gris = np.uint8(color.rgb2gray(img)*255) 
+    
+    [filas, columnas]= gris.shape
+    #n será el factor por el que se multiplicarán pixeles adyacentes
+    #considerando el comentario hecho en clase sobre si al aumentarlo
+    #se lograba suavizar más la imagen
+    n=2
+    
+    #Se aplica la máscara de Sobel a la imagen
+    Sobel = np.zeros(gris.shape)
+    dfx=np.zeros(gris.shape)
+    dfy=np.zeros(gris.shape)
+    for x in range(filas - 3):
+        for y in range(columnas - 3):
+            dfx[x+2,y+2]=abs(gris[3+x,1+y]+n*gris[3+x,2+y]+gris[3+x,3+y]-(gris[1+x,1+y]+n*gris[1+x,2+y]+gris[1+x,3+y]))
+            if dfx[x+2,y+2]>255:
+                dfx[x+2,y+2]=255
+            else:
+                dfx[x+2,y+2]=dfx[x+2,y+2]
+            dfy[x+2,y+2]=abs(gris[1+x,3+y]+n*gris[2+x,3+y]+gris[3+x,3+y]-(gris[1+x,1+y]+n*gris[2+x,1+y]+gris[3+x,1+y]))        
+            if dfy[x+2,y+2]>255:
+                dfy[x+2,y+2]=255
+            else:
+                dfy[x+2,y+2]=dfy[x+2,y+2]
+            Sobel[x+2,y+2]=dfx[x+2,y+2]+dfy[x+2,y+2]
+    umbral = 9
+    #Se realiza la suma del 60% de la imagen original + 40% de la imagen obtenida
+    #con Sobel si el valor de Sobel es menor al umbral seleccionado
+    #Si el valor es mayor al umbral, se respeta el valor de Sobel para recalcar el borde
+    Ima = np.zeros(gris.shape)
+    for i in range(filas):
+        for j in range(columnas):
+            if Sobel[i,j]<umbral:
+                Ima[i,j]=0.4*+Sobel[i,j]+0.6*gris[i,j]
+            else:
+                Ima[i,j]=Sobel[i,j]
+    Ima=np.uint8(Ima)
+    return Ima
+
+#Funcion para mejora de contraste
+def Contraste(img): 
+    #Pasamos la imagen de BGR a LAB
+    lab= cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(20,20))
+    cl = clahe.apply(l)
+    limg = cv2.merge((cl,a,b))
+    final = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
+    return final
+
+#Funcion para aplicar Filtro Pasa Bajas con Fourier
+def FiltroPasaBajas(img):
+    r = 5 # Tamaño de la ventana
+    ham = np.hamming(img.shape[0])[:,None] #Ventana de Hamming en 1D
+    ham2=np.hamming(img.shape[1])[:,None]
+    ham2d = np.sqrt(np.dot(ham, ham2.T)) ** r #Hamming en 2D
+    f = cv2.dft(img.astype(np.float32), flags=cv2.DFT_COMPLEX_OUTPUT)
+    f_shift = np.fft.fftshift(f)
+    f_complejo = f_shift[:,:,0]*1j + f_shift[:,:,1]
+    f_filtro = ham2d * f_complejo
+    f_filtro_shift = np.fft.fftshift(f_filtro)
+    #Inversa de la transformada de Fourier
+    inv_img = np.fft.ifft2(f_filtro_shift) 
+    imgFiltrada = np.abs(inv_img)
+    imgFiltrada -= imgFiltrada.min()
+    imgFiltrada = imgFiltrada*255 / imgFiltrada.max()
+    imgFiltrada = imgFiltrada.astype(np.uint8)
+    return imgFiltrada
+
+'Seleccionamos la imagen'
+path='Venas4.jpg'
+gris=np.uint8(color.rgb2gray(io.imread(path))*255)
+[fil,col]=gris.shape
+plt.figure()
+plt.imshow(gris,cmap='gray')
+ImagenAux = Contraste(cv2.imread(path))
+# plt.figure()
+# plt.imshow(np.uint8(ImagenAux))
+
+'Aplicamos Correción Gamma con un valor de 4'
+gamma=4
+imgGam = CorrGamma(ImagenAux,gamma)
+# plt.figure()
+# plt.imshow(imgGam, cmap='gray')
+
+'Aplicamos un promediado'
+ImagenAux=cv2.cvtColor(ImagenAux, cv2.COLOR_BGR2GRAY)
+img2=0.4*imgGam+0.6*ImagenAux
+# plt.figure()
+# plt.imshow(img2, cmap='gray')
+
+'Aplicamos el filtro pasa bajas'
+img=ImagenAux
+filtered_img=FiltroPasaBajas(img)
+# plt.figure()
+# plt.imshow(filtered_img, cmap='gray')
+
+'Volvemos a aplicar mejora de contraste'
+filtered_img=Contraste(cv2.cvtColor(filtered_img, cv2.COLOR_RGB2BGR))
+filtered_img=cv2.cvtColor(filtered_img, cv2.COLOR_BGR2GRAY)
+# plt.figure()
+# plt.imshow(filtered_img, cmap='gray')
+
+'Y filtro pasa bajas'
+new=FiltroPasaBajas(filtered_img)
+plt.figure()
+plt.imshow(new, cmap='gray')
+
+'Binarizamos la imagen basada en un umbral'
+Imagen_Salida = np.zeros(new.shape, dtype=np.uint8)
+for i in range(new.shape[0]):
+    for j in range (new.shape[1]):
+        if (new[i, j] >= 30 and new[i,j]<=100):
+            Imagen_Salida[i, j] = 255
+        else:
+            Imagen_Salida[i, j] = 0
+plt.figure()
+plt.imshow(Imagen_Salida, cmap='gray')
+
+'Aplicamos Laplaciano'
+[zeilen,spalten]=Imagen_Salida.shape
+dfx=np.zeros((zeilen,spalten))
+dfy=np.zeros((zeilen,spalten))
+lapl=np.zeros((zeilen,spalten))
+mask1=np.array([[0,-1,0],[-1,6,-1],[0,-1,0]])
+mask2=np.array([[-1,-1,-1],[-1,-1,-1],[-1,-1,-1]])
+for x in range(0,zeilen-1):
+    for y in range(0,spalten-1):   
+        dfx[x,y]=abs(((Imagen_Salida[x-1,y-1]*mask1[0,0])+(Imagen_Salida[x-1,y]*mask1[0,1])+(Imagen_Salida[x-1,y+1]*mask1[0,2])+(Imagen_Salida[x,y-1]*mask1[1,0])+\
+                  (Imagen_Salida[x,y]*mask1[1,1])+(Imagen_Salida[x,y+1]*mask1[1,2])+(Imagen_Salida[x+1,y-1]*mask1[2,0])+(Imagen_Salida[x+1,y]*mask1[2,1])+\
+                      (Imagen_Salida[x-1,y-1]*mask1[2,2])))       
+        dfy[x,y]=abs(((Imagen_Salida[x-1,y-1]*mask2[0,0])+(Imagen_Salida[x-1,y]*mask2[0,1])+(Imagen_Salida[x-1,y+1]*mask2[0,2])+(Imagen_Salida[x,y-1]*mask2[1,0])+\
+                  (Imagen_Salida[x,y]*mask2[1,1])+(Imagen_Salida[x,y+1]*mask2[1,2])+(Imagen_Salida[x+1,y-1]*mask2[2,0])+(Imagen_Salida[x+1,y]*mask2[2,1])+\
+                      (Imagen_Salida[x-1,y-1]*mask2[2,2])))                     
+        lapl[x,y]=dfx[x,y]+dfy[x,y]
+        if lapl[x,y]>255:
+            lapl[x,y]=255
+            
+plt.figure()
+plt.imshow(lapl,cmap="gray")
+
+'Extraemos el borde externo'
+borde=np.zeros(gris.shape)
+for i in range (fil):
+    for j in range(col):
+        if gris[i,j]>=2:
+            borde[i,j]=255
+        else:
+            borde[i,j]=0
+# plt.figure()
+# plt.imshow(borde)
+sobel = Sobel(borde)
+plt.figure()
+plt.imshow(sobel,cmap="gray")   
+kerneld=np.uint8(np.ones((29,29)))
+dilationsb=cv2.dilate(np.uint8(sobel),kerneld,iterations = 1)
+# plt.figure()
+# plt.imshow(dilationsb, cmap='gray')
+for i in range (fil):
+    for j in range(col):
+        if dilationsb[i,j]>0:
+            lapl[i,j]=0
+        else:
+            lapl[i,j]=lapl[i,j]            
+plt.figure()
+plt.imshow(lapl)
+
+'Aplicamos morfología matemática'
+#Erosión
+kernele=np.uint8(np.ones((5,5)))
+erosion=cv2.erode(np.uint8(lapl),kernele,iterations = 1)
+plt.figure()
+plt.imshow(erosion, cmap='gray')
+#Dilatación
+kerneld=np.uint8(np.ones((5,5)))
+dilation=cv2.dilate(np.uint8(lapl),kerneld,iterations = 1)
+plt.figure()
+plt.imshow(dilation, cmap='gray')
+#Closing -dilatación seguido de erosión-
+kernelc=np.uint8(np.ones((5,5)))
+closing=cv2.morphologyEx(dilation, cv2.MORPH_CLOSE, kernelc)
+plt.figure()
+plt.imshow(closing, cmap='gray')
+#Última erosión
+kernele=np.uint8(np.ones((5,5)))
+erosion=cv2.erode(np.uint8(closing),kernele,iterations = 1)
+plt.figure()
+plt.imshow(erosion, cmap='gray')
