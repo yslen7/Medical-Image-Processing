@@ -1,0 +1,48 @@
+#Importamos librerías
+import matplotlib.pyplot as plt
+import numpy as np
+from skimage import io, color, morphology
+
+plt.close('all')
+
+ima=io.imread('1.jpg')
+gris=(color.rgb2gray(ima))*255
+plt.figure(1)
+plt.imshow(gris, cmap='gray')
+#ion permite hacer refresh sobre nuestra imagen porque queremos ver el crecimiento de la imagen
+plt.ion()
+
+tolerancia=10
+f,c=gris.shape
+pos=np.int32(plt.ginput(0,0))
+#0,0 significa que damos clicks y al dar un enter, corre el programa. Para los puntos semilla
+#Matriz llena de ceros pero tipo byte. O es 0 o es 1
+aux1=np.zeros([f,c],dtype=np.byte) #T(x-1)
+aux2=np.zeros([f,c],dtype=np.byte) #T(x)
+#Necesitamos guardar los datos antes de hacer la expansión
+#aux1 nos ayuda a mantener los datos de un paso previo, aux 2 para las modificiacioes aactuales
+
+aux1[pos[:,1],pos[:,0]]=1 #Es el primer punto semilla
+pixeles=gris[pos[:,1],pos[:,0]] #Valor de gris, del punto semilla
+promedio=np.mean(pixeles) #valor promedio del valor en gris del punto semilla
+
+while (np.sum(aux1)!=np.sum(aux2)):
+    plt.cla()
+    aux2=np.copy(aux1)
+    bordes=morphology.binary_dilation(aux1)-aux1#Al hacer dilatación se hace más grande, 
+    #al restar, se entrega una borde únicamente con los dilatados
+    #si son parte de nuestro objeto de interés, los dejamos. Si no, adeu popó
+    pos_borde=np.argwhere(bordes)
+    #el arg nos da el argumento/posicion de donde ocurrieron esos bordes
+    gris_bordes=gris[pos_borde[:,0],pos_borde[:,1]]
+    #Se agregan los pixeles que están en el intervalo de interés
+    #para saber si los nuevos pixeles expandidos pertenencen o no a los nuevos que necesito
+    compara=list(np.logical_and([gris_bordes>(promedio-tolerancia)],[gris_bordes<(promedio+tolerancia)]))
+    datos=pos_borde[compara]
+    aux1[datos[:,0],datos[:,1]]=1
+    plt.imshow(aux1,cmap='gray')
+    plt.pause(0.001)
+
+plt.figure(2)
+plt.imshow(gris, cmap='gray')
+    
