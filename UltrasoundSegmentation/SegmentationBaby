@@ -1,0 +1,122 @@
+from skimage import data, color, io, morphology
+import numpy as np
+import matplotlib.pyplot as plt
+import cv2
+
+plt.close('all')
+
+#Lectura de la imagen
+Ima=np.uint8(color.rgb2gray(io.imread('ultra1.jpg'))*255)
+[f,c]=Ima.shape
+
+plt.figure(1)
+plt.imshow(Ima, cmap='gray')
+#ion permite hacer refresh sobre nuestra imagen para poder ver el crecimiento de la imagen
+plt.ion()
+
+"""Obtencion del histograma de la imagen"""
+
+histograma=np.zeros(256)
+for i in range(f):
+    for j in range(c):
+        pos=Ima[i,j]
+        histograma[pos]=histograma[pos]+1
+probabilidad=np.zeros(256)
+probabilidad=histograma/(f*c)
+
+"""Ecualizacion de histograma"""
+
+he=probabilidad.cumsum() #Distribucion de probabilidad de los niveles de gris
+sal=np.zeros((f,c))
+
+for i in range(f):
+    for j in range(c):
+        pos=Ima[i,j]
+        sal[i,j]=np.uint8(he[pos]*255)
+plt.figure()
+plt.imshow(sal,cmap="gray")
+plt.show()
+            
+"""Segmentacion por crecimiento de regiones"""
+
+#tolerancia=int(input('Ingrese la tolerancia: '))
+tolerancia=30
+pos=np.int32(plt.ginput(0,0))
+#0,0 significa que damos clicks y al dar un enter, corre el programa. Seleccion de los puntos semilla
+aux1=np.zeros([f,c],dtype=np.byte) #T(x-1)
+aux2=np.zeros([f,c],dtype=np.byte) #T(x)
+#Guardamos los datos antes de hacer la expansión
+#aux1 mantiene los datos de un paso previo
+#aux 2 servira para las modificiaciones actuales
+
+aux1[pos[:,1],pos[:,0]]=1 #Primer punto semilla
+pixeles=sal[pos[:,1],pos[:,0]] #Valor de gris, del punto semilla
+promedio=np.mean(pixeles) #Valor promedio del valor de gris del punto semilla
+
+#Se repetirá el ciclo hasta que la region ya no pueda crecer, de acuerdo con la tolerancia
+while (np.sum(aux1)!=np.sum(aux2)):
+    plt.cla() 
+    aux2=np.copy(aux1)
+    bordes=morphology.binary_dilation(aux1)-aux1#Al hacer dilatación se hace más grande, 
+    #al restar, se entrega una borde únicamente con los dilatados
+    #si son parte de nuestro objeto de interés, los dejamos.
+    pos_borde=np.argwhere(bordes)
+    #el arg nos da el argumento/posicion de donde ocurrieron esos bordes
+    gris_bordes=sal[pos_borde[:,0],pos_borde[:,1]]
+    #Se agregan los pixeles que están en el intervalo de interés
+    #para saber si los nuevos pixeles expandidos pertenencen o no a los nuevos que necesito
+    compara=list(np.logical_and([gris_bordes>(promedio-tolerancia)],[gris_bordes<(promedio+tolerancia)]))
+    datos=pos_borde[compara]
+    aux1[datos[:,0],datos[:,1]]=1
+    plt.imshow(aux1,cmap='gray')
+    plt.pause(0.01)
+
+"""Aplicamos morfologia matematica para mejorar la segmentacion"""
+
+#Dilatación
+kerneld=np.uint8(np.ones((7,7)))
+dilation=cv2.dilate(np.uint8(aux1),kerneld,iterations = 1)
+plt.figure()
+plt.imshow(dilation, cmap='gray')
+
+#Closing -dilatación seguido de erosión-
+kernelc=np.uint8(np.ones((7,7)))
+closing=cv2.morphologyEx(dilation, cv2.MORPH_CLOSE, kernelc)
+plt.figure()
+plt.imshow(closing, cmap='gray')
+
+"""Deteccion de los bordes del resultado"""
+
+n=2
+#Se aplica la máscara de Sobel
+Sobel = np.zeros(Ima.shape)
+dfx=np.zeros(Ima.shape)
+dfy=np.zeros(Ima.shape)
+for x in range(f - 3):
+    for y in range(c - 3):
+        dfx[x+2,y+2]=abs(closing[3+x,1+y]+n*closing[3+x,2+y]+closing[3+x,3+y]-(closing[1+x,1+y]+n*closing[1+x,2+y]+closing[1+x,3+y]))
+        if dfx[x+2,y+2]>255:
+            dfx[x+2,y+2]=255
+        else:
+            dfx[x+2,y+2]=dfx[x+2,y+2]
+        dfy[x+2,y+2]=abs(closing[1+x,3+y]+n*closing[2+x,3+y]+closing[3+x,3+y]-(closing[1+x,1+y]+n*closing[2+x,1+y]+closing[3+x,1+y]))        
+        if dfy[x+2,y+2]>255:
+            dfy[x+2,y+2]=255
+        else:
+            dfy[x+2,y+2]=dfy[x+2,y+2]
+        Sobel[x+2,y+2]=dfx[x+2,y+2]+dfy[x+2,y+2]
+
+"""Resultados"""
+
+plt.figure()
+plt.imshow(np.uint8(Sobel), cmap='gray')
+
+Final=np.zeros((f,c))
+for i in range (f):
+    for j in range (c): 
+        if Sobel[i,j]>=1:
+            Final[i,j]=255
+        else:
+            Final[i,j]=Ima[i,j]
+plt.figure()
+plt.imshow(Final,cmap='gray')
