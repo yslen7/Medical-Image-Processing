@@ -6,7 +6,7 @@ import cv2
 plt.close('all')
 
 #Lectura de la imagen
-Ima=np.uint8(color.rgb2gray(io.imread('ultra1.jpg'))*255)
+Ima=np.uint8(color.rgb2gray(io.imread('ultra1.jpg')))
 [f,c]=Ima.shape
 
 plt.figure(1)
